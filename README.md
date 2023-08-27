@@ -1,13 +1,26 @@
-<h1>@react-three/xr</h1>
+<!-- prettier-ignore -->
+<p>
+  <img width="100%" src="https://assets.solidjs.com/banner?type=solid-xr&background=tiles&project=%20" alt="solid-xr">
+</p>
 
-[![Version](https://img.shields.io/npm/v/@react-three/xr?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@react-three/xr)
-[![Downloads](https://img.shields.io/npm/dt/@react-three/xr.svg?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@react-three/xr)
+[![Version](https://img.shields.io/npm/v/@solid-three/xr?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@solid-three/drei)
+[![Downloads](https://img.shields.io/npm/dt/@solid-three/xr.svg?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@solid-three/drei)
+[![Discord Shield](https://img.shields.io/discord/740090768164651008?style=flat&colorA=000000&colorB=000000&label=discord&logo=discord&logoColor=ffffff)](https://discord.com/channels/740090768164651008/741751532592038022)
+
+<!-- [![Open in GitHub Codespaces](https://img.shields.io/static/v1?&message=Open%20in%20%20Codespaces&style=flat&colorA=000000&colorB=000000&label=GitHub&logo=github&logoColor=ffffff)](https://github.com/codespaces/new?template_repository=pmndrs%2Fdrei) -->
+
+> `solid-three`: This is a WIP port of [react-xr](https://github.com/pmndrs/react-xr). Not published yet.
+
+<h1>@solid-three/xr</h1>
+
+[![Version](https://img.shields.io/npm/v/@solid-three/xr?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@solid-three/xr)
+[![Downloads](https://img.shields.io/npm/dt/@solid-three/xr.svg?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@solid-three/xr)
 [![Discord Shield](https://img.shields.io/discord/740090768164651008?style=flat&colorA=000000&colorB=000000&label=discord&logo=discord&logoColor=ffffff)](https://discord.gg/poimandres)
 
-React components and hooks for creating VR/AR applications with [@react-three/fiber](https://github.com/pmndrs/react-three-fiber)
+solid components and hooks for creating VR/AR applications with [@solid-three/fiber](https://github.com/pmndrs/solid-three-fiber)
 
 ```bash
-npm install @react-three/xr
+npm install @solid-three/xr
 ```
 
 ## Examples
@@ -28,8 +41,8 @@ npm install @react-three/xr
 The following adds a button to start your session and controllers inside an XR manager to prepare your scene for WebXR rendering and interaction.
 
 ```jsx
-import { VRButton, ARButton, XR, Controllers, Hands } from '@react-three/xr'
-import { Canvas } from '@react-three/fiber'
+import { VRButton, ARButton, XR, Controllers, Hands } from '@solid-three/xr'
+import { Canvas } from '@solid-three/fiber'
 
 function App() {
   return (
@@ -39,10 +52,10 @@ function App() {
         <XR>
           <Controllers />
           <Hands />
-          <mesh>
-            <boxGeometry />
-            <meshBasicMaterial color="blue" />
-          </mesh>
+          <T.Mesh>
+            <T.BoxGeometry />
+            <T.MeshBasicMaterial color="blue" />
+          </T.Mesh>
         </XR>
       </Canvas>
     </>
@@ -108,7 +121,7 @@ function App() {
     /** Called when available inputsources change */
     onInputSourcesChange={(event: XREvent<XRSessionEvent>) => ...}
   >
-    {/* All your regular react-three-fiber elements go here */}
+    {/* All your regular solid-three-fiber elements go here */}
   </XR>
 </Canvas>
 ```
@@ -136,7 +149,7 @@ const {
 } = useXR()
 ```
 
-To subscribe to a specific key, `useXR` accepts a [Zustand](https://github.com/pmndrs/zustand) selector:
+To subscribe to a specific key, `useXR` accepts a zustand/redux-like selector, returning an accessor to the selected property.
 
 ```jsx
 const player = useXR((state) => state.player)
@@ -236,10 +249,10 @@ To interact with objects using controllers you can use `<Interactive />` compone
 The following interaction events are supported: `onHover`, `onBlur`, `onSelect`, `onSelectEnd`, `onSelectStart`, `onSelectMissed`, `onSqueeze`, `onSqueezeEnd`, `onSqueezeStart`, `onSqueezeMissed`, `onMove`.
 
 ```jsx
-const boxRef = useRef()
+const [boxRef, setBoxRef] = createSignal()
 useInteraction(boxRef, 'onSelect', (event: XRInteractionEvent) => ...)
 
-<Box ref={boxRef} />
+<Box ref={setBoxRef} />
 ```
 
 ### useHitTest
@@ -269,10 +282,10 @@ useXREvent('squeeze', (event: XRControllerEvent) => ..., { handedness: 'left' | 
 
 ### Custom XRButton
 
-While you can customize XRButton, there's a way to shave off `react-dom` and customize it even more. For this there's a couple of low-level utilities of a headless xr button: `startSession`, `stopSession` and `toggleSession`.
+While you can customize XRButton, there's a way to shave off `solid-dom` and customize it even more. For this there's a couple of low-level utilities of a headless xr button: `startSession`, `stopSession` and `toggleSession`.
 
 ```jsx
-import { toggleSession } from '@react-three/xr'
+import { toggleSession } from '@solid-three/xr'
 
 const handleClick = async () => {
   const session = await toggleSession('immersive-vr')
@@ -291,14 +304,14 @@ document.appendChild(button)
 
 ## Teleportation
 
-To facilitate instant or accessible movement, react-xr provides teleportation helpers.
+To facilitate instant or accessible movement, solid-xr provides teleportation helpers.
 
 ### TeleportationPlane
 
 A teleportation plane with a marker that will teleport on interaction.
 
 ```jsx
-import { TeleportationPlane } from '@react-three/xr'
+import { TeleportationPlane } from '@solid-three/xr'
 ;<TeleportationPlane
   /** Whether to allow teleportation from left controller. Default is `false` */
   leftHand={false}
@@ -316,7 +329,7 @@ import { TeleportationPlane } from '@react-three/xr'
 Returns a `TeleportCallback` to teleport the player to a position.
 
 ```jsx
-import { useTeleportation } from '@react-three/xr'
+import { useTeleportation } from '@solid-three/xr'
 
 const teleport = useTeleportation()
 
@@ -324,6 +337,6 @@ teleport([x, y, z])
 teleport(new THREE.Vector3(x, y, z))
 ```
 
-## Built with react-xr
+## Built with solid-xr
 
 - <a href="https://github.com/richardanaya/avatar-poser"><img src="https://raw.githubusercontent.com/richardanaya/avatar-poser/main/public/avatar-poser.png" alt="Avatar Poser github link" width="100"/></a>
