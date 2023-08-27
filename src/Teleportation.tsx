@@ -1,7 +1,8 @@
+import { T, ThreeProps, useFrame, useThree } from '@solid-three/fiber'
 import * as THREE from 'three'
-import * as React from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
 import { Interactive, type XRInteractionEvent } from './Interactions'
+import { processProps } from './helpers/processProps'
+import { RefComponent } from './helpers/typeHelpers'
 
 const _q = /* @__PURE__ */ new THREE.Quaternion()
 
@@ -14,41 +15,41 @@ export type TeleportCallback = (target: THREE.Vector3 | THREE.Vector3Tuple) => v
  * Returns a {@link TeleportCallback} to teleport the player to a position.
  */
 export function useTeleportation(): TeleportCallback {
-  const frame = React.useRef<XRFrame>()
-  const baseReferenceSpace = React.useRef<XRReferenceSpace | null>(null)
-  const teleportReferenceSpace = React.useRef<XRReferenceSpace | null>(null)
+  let frame: XRFrame | undefined
+  let baseReferenceSpace: XRReferenceSpace | null
+  let teleportReferenceSpace: XRReferenceSpace | null = null
 
   useFrame((state, _, xrFrame) => {
-    frame.current = xrFrame
+    frame = xrFrame
 
     const referenceSpace = state.gl.xr.getReferenceSpace()
-    baseReferenceSpace.current ??= referenceSpace
+    baseReferenceSpace ??= referenceSpace
 
-    const teleportOffset = teleportReferenceSpace.current
+    const teleportOffset = teleportReferenceSpace
     if (teleportOffset && referenceSpace !== teleportOffset) {
       state.gl.xr.setReferenceSpace(teleportOffset)
     }
   })
 
-  return React.useCallback((target) => {
-    const base = baseReferenceSpace.current
+  return (target) => {
+    const base = baseReferenceSpace
     if (base) {
       const [x, y, z] = Array.from(target as THREE.Vector3Tuple)
       const offsetFromBase = { x: -x, y: -y, z: -z }
 
-      const pose = frame.current?.getViewerPose(base)
+      const pose = frame?.getViewerPose(base)
       if (pose) {
         offsetFromBase.x += pose.transform.position.x
         offsetFromBase.z += pose.transform.position.z
       }
 
       const teleportOffset = new XRRigidTransform(offsetFromBase, _q)
-      teleportReferenceSpace.current = base.getOffsetReferenceSpace(teleportOffset)
+      teleportReferenceSpace = base.getOffsetReferenceSpace(teleportOffset)
     }
-  }, [])
+  }
 }
 
-export interface TeleportationPlaneProps extends Partial<JSX.IntrinsicElements['group']> {
+export interface TeleportationPlaneProps extends Partial<ThreeProps<'Group'>> {
   /** Whether to allow teleportation from left controller. Default is `false` */
   leftHand?: boolean
   /** Whether to allow teleportation from right controller. Default is `false` */
@@ -62,74 +63,78 @@ export interface TeleportationPlaneProps extends Partial<JSX.IntrinsicElements['
 /**
  * Creates a teleportation plane with a marker that will teleport on interaction.
  */
-export const TeleportationPlane = React.forwardRef<THREE.Group, TeleportationPlaneProps>(function TeleportationPlane(
-  { leftHand = false, rightHand = false, maxDistance = 10, size = 0.25, ...props },
-  ref
-) {
+export const TeleportationPlane: RefComponent<THREE.Group, TeleportationPlaneProps> = (_props) => {
+  const [props, rest] = processProps(
+    _props,
+    {
+      leftHand: false,
+      rightHand: false,
+      maxDistance: 10,
+      size: 0.25
+    },
+    ['ref', 'leftHand', 'rightHand', 'maxDistance', 'size']
+  )
   const teleport = useTeleportation()
-  const marker = React.useRef<THREE.Mesh>(null!)
-  const intersection = React.useRef<THREE.Vector3>()
+  let marker: THREE.Mesh
+  let intersection: THREE.Vector3
   const camera = useThree((state) => state.camera)
 
-  const isInteractive = React.useCallback(
-    (e: XRInteractionEvent): boolean => {
-      const handedness = e.target.inputSource?.handedness
-      return !!((handedness !== 'left' || leftHand) && (handedness !== 'right' || rightHand))
-    },
-    [leftHand, rightHand]
-  )
+  const isInteractive = (e: XRInteractionEvent): boolean => {
+    const handedness = e.target.inputSource?.handedness
+    return !!((handedness !== 'left' || props.leftHand) && (handedness !== 'right' || props.rightHand))
+  }
 
   return (
-    <group ref={ref} {...props}>
-      <mesh ref={marker} visible={false} rotation-x={-Math.PI / 2}>
-        <circleGeometry args={[size, 32]} />
-        <meshBasicMaterial color="white" />
-      </mesh>
+    <T.Group ref={props.ref} {...rest}>
+      <T.Mesh ref={marker!} visible={false} rotation-x={-Math.PI / 2}>
+        <T.CircleGeometry args={[props.size, 32]} />
+        <T.MeshBasicMaterial color="white" />
+      </T.Mesh>
       <Interactive
         onMove={(e) => {
           if (!isInteractive(e) || !e.intersection) return
 
-          const distanceFromCamera = e.intersection.point.distanceTo(camera.position)
-          marker.current.visible = distanceFromCamera <= maxDistance
-          marker.current.scale.setScalar(1)
+          const distanceFromCamera = e.intersection.point.distanceTo(camera().position)
+          marker.visible = distanceFromCamera <= props.maxDistance
+          marker.scale.setScalar(1)
 
-          intersection.current = e.intersection.point
-          marker.current.position.copy(intersection.current)
+          intersection = e.intersection.point
+          marker.position.copy(intersection)
         }}
         onHover={(e) => {
           if (!isInteractive(e) || !e.intersection) return
 
-          const distanceFromCamera = e.intersection.point.distanceTo(camera.position)
-          marker.current.visible = distanceFromCamera <= maxDistance
-          marker.current.scale.setScalar(1)
+          const distanceFromCamera = e.intersection.point.distanceTo(camera().position)
+          marker.visible = distanceFromCamera <= props.maxDistance
+          marker.scale.setScalar(1)
         }}
         onBlur={(e) => {
           if (!isInteractive(e)) return
-          marker.current.visible = false
+          marker.visible = false
         }}
         onSelectStart={(e) => {
           if (!isInteractive(e) || !e.intersection) return
 
-          const distanceFromCamera = e.intersection.point.distanceTo(camera.position)
-          marker.current.visible = distanceFromCamera <= maxDistance
-          marker.current.scale.setScalar(1.1)
+          const distanceFromCamera = e.intersection.point.distanceTo(camera().position)
+          marker.visible = distanceFromCamera <= props.maxDistance
+          marker.scale.setScalar(1.1)
         }}
         onSelectEnd={(e) => {
-          if (!isInteractive(e) || !intersection.current) return
+          if (!isInteractive(e) || !intersection) return
 
-          marker.current.visible = true
-          marker.current.scale.setScalar(1)
+          marker.visible = true
+          marker.scale.setScalar(1)
 
-          const distanceFromCamera = intersection.current.distanceTo(camera.position)
-          if (distanceFromCamera <= maxDistance) {
-            teleport(intersection.current)
+          const distanceFromCamera = intersection.distanceTo(camera().position)
+          if (distanceFromCamera <= props.maxDistance) {
+            teleport(intersection)
           }
         }}
       >
-        <mesh rotation-x={-Math.PI / 2} visible={false} scale={1000}>
-          <planeGeometry />
-        </mesh>
+        <T.Mesh rotation-x={-Math.PI / 2} visible={false} scale={1000}>
+          <T.PlaneGeometry />
+        </T.Mesh>
       </Interactive>
-    </group>
+    </T.Group>
   )
-})
+}

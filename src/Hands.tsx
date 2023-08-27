@@ -1,13 +1,12 @@
-import * as React from 'react'
-import { Object3DNode, extend, createPortal } from '@react-three/fiber'
+import { Object3DNode, T, extend } from '@solid-three/fiber'
+import { For, createEffect, createMemo } from 'solid-js'
 import { OculusHandModel } from './OculusHandModel'
 import { useXR } from './XR'
-import { useIsomorphicLayoutEffect } from './utils'
 
 declare global {
-  namespace JSX {
+  namespace SolidThree {
     interface IntrinsicElements {
-      oculusHandModel: Object3DNode<OculusHandModel, typeof OculusHandModel>
+      OculusHandModel: Object3DNode<OculusHandModel>
     }
   }
 }
@@ -18,14 +17,22 @@ export interface HandsProps {
 }
 export function Hands({ modelLeft, modelRight }: HandsProps) {
   const controllers = useXR((state) => state.controllers)
-  React.useMemo(() => extend({ OculusHandModel }), [])
+  createMemo(() => extend({ OculusHandModel }), [])
 
   // Send fake connected event (no-op) so models start loading
-  useIsomorphicLayoutEffect(() => {
-    for (const target of controllers) {
+  createEffect(() => {
+    for (const target of controllers()) {
       target.hand.dispatchEvent({ type: 'connected', data: target.inputSource, fake: true })
     }
-  }, [controllers, modelLeft, modelRight])
+  })
 
-  return <>{controllers.map(({ hand }) => createPortal(<oculusHandModel args={[hand, modelLeft, modelRight]} />, hand))}</>
+  return (
+    <For each={controllers()}>
+      {({ hand }) => (
+        <T.Portal container={hand}>
+          <T.OculusHandModel args={[hand, modelLeft, modelRight]} />
+        </T.Portal>
+      )}
+    </For>
+  )
 }

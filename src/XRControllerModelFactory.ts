@@ -16,7 +16,7 @@ export class XRControllerModelFactory {
     this._assetCache = {}
   }
 
-   initializeControllerModel(controllerModel: XRControllerModel, xrInputSource: XRInputSource): Promise<void> {
+  initializeControllerModel(controllerModel: XRControllerModel, xrInputSource: XRInputSource): Promise<void> {
     // TODO check gamepad in other condition
     if (xrInputSource.targetRayMode !== 'tracked-pointer' || !xrInputSource.gamepad) {
       return Promise.resolve()

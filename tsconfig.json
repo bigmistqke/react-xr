@@ -1,20 +1,10 @@
 {
+  "extends": "@vinxi/tsconfig/solid-library.json",
+  "include": ["src"],
   "compilerOptions": {
-    "outDir": "dist",
+    "outDir": "./types",
     "target": "esnext",
-    "module": "esnext",
-    "lib": ["esnext", "dom"],
-    "moduleResolution": "node",
-    "jsx": "react",
-    "strict": true,
-    "pretty": true,
-    "declaration": true,
-    "emitDeclarationOnly": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "paths": {
-      "@react-three/xr": ["./src"]
-    }
+    "lib": ["dom", "esnext"]
   },
-  "include": ["src/**/*"]
+  "exclude": ["dist", "build", "node_modules"]
 }

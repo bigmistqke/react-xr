@@ -1,25 +1,37 @@
-import * as React from 'react'
+import { T, useThree } from '@solid-three/fiber'
+import { Accessor, For, createEffect, createMemo, createSignal, onCleanup, useContext, type JSX } from 'solid-js'
+import { SetStoreFunction, createStore } from 'solid-js/store'
 import * as THREE from 'three'
-import create, { EqualityChecker, GetState, SetState, StateSelector } from 'zustand'
-import { useThree } from '@react-three/fiber'
-import { XRController } from './XRController'
 import { InteractionManager, XRInteractionHandler, XRInteractionType } from './Interactions'
+import { XRController } from './XRController'
 import { XREventHandler } from './XREvents'
-import { uniq, useIsomorphicLayoutEffect, useCallbackRef } from './utils'
 import { XRContext, XRState } from './context'
+import { defaultProps } from './helpers/defaultProps'
+import { processProps } from './helpers/processProps'
+import { RefComponent } from './helpers/typeHelpers'
+import { uniq } from './utils'
 
 interface GlobalSessionState {
-  set: SetState<GlobalSessionState>
-  get: GetState<GlobalSessionState>
+  set: SetStoreFunction<GlobalSessionState>
+  get: Accessor<GlobalSessionState>
   session: XRSession | null
   referenceSpaceType: XRReferenceSpaceType | null
 }
-const globalSessionStore = create<GlobalSessionState>((set, get) => ({ set, get, session: null, referenceSpaceType: null }))
+
+//@ts-expect-error
+const set: SetStoreFunction<RootState> = (...args: any[]) => setGlobalSessionStore(...args)
+const get: Accessor<GlobalSessionState> = () => globalSessionStore
+const [globalSessionStore, setGlobalSessionStore] = createStore({
+  get,
+  set,
+  session: null,
+  referenceSpaceType: null
+} as GlobalSessionState)
 
 export type XRManagerEventType = 'sessionstart' | 'sessionend'
 export interface XRManagerEvent {
   type: XRManagerEventType
-  target: XRSession
+  target: XRSession | null
 }
 export interface XRProps {
   /**
@@ -47,192 +59,179 @@ export interface XRProps {
   onVisibilityChange?: XREventHandler<XRSessionEvent>
   /** Called when available inputsources change */
   onInputSourcesChange?: XREventHandler<XRSessionEvent>
-  children: React.ReactNode
+  children: JSX.Element
 }
-function XRManager({
-  foveation = 0,
-  frameRate = undefined,
-  referenceSpace = 'local-floor',
-  onSessionStart,
-  onSessionEnd,
-  onVisibilityChange,
-  onInputSourcesChange,
-  children
-}: XRProps) {
-  const gl = useThree((state) => state.gl)
-  const camera = useThree((state) => state.camera)
-  const player = useXR((state) => state.player)
-  const get = useXR((state) => state.get)
-  const set = useXR((state) => state.set)
-  const session = useXR((state) => state.session)
-  const controllers = useXR((state) => state.controllers)
+function XRManager(_props: XRProps) {
+  const props = defaultProps(_props, {
+    foveation: 0,
+    referenceSpace: 'local-floor'
+  })
+  const threeState = useThree()
+  const xrState = useXR()
 
-  const onSessionStartRef = useCallbackRef(onSessionStart)
-  const onSessionEndRef = useCallbackRef(onSessionEnd)
-  const onVisibilityChangeRef = useCallbackRef(onVisibilityChange)
-  const onInputSourcesChangeRef = useCallbackRef(onInputSourcesChange)
-
-  useIsomorphicLayoutEffect(() => {
-    const handlers = [0, 1].map((id) => {
-      const target = new XRController(id, gl)
-      const onConnected = () => set((state) => ({ controllers: [...state.controllers, target] }))
-      const onDisconnected = () => set((state) => ({ controllers: state.controllers.filter((it) => it !== target) }))
+  createEffect(() => {
+    ;[0, 1].map((id) => {
+      const target = new XRController(id, threeState.gl)
+      const onConnected = () => xrState.set((state) => ({ controllers: [...state.controllers, target] }))
+      const onDisconnected = () => xrState.set((state) => ({ controllers: state.controllers.filter((it) => it !== target) }))
 
       target.addEventListener('connected', onConnected)
       target.addEventListener('disconnected', onDisconnected)
 
-      return () => {
+      onCleanup(() => {
         target.removeEventListener('connected', onConnected)
         target.removeEventListener('disconnected', onDisconnected)
+      })
+    })
+  })
+
+  createEffect(() => {
+    // s3f why not immediately bind xrState to globalSessionStore.session?
+    xrState.set({
+      get session() {
+        return globalSessionStore.session
       }
     })
+  })
 
-    return () => handlers.forEach((cleanup) => cleanup())
-  }, [gl, set])
+  createEffect(() => {
+    threeState.gl.xr.setFoveation(props.foveation)
+    xrState.set({ foveation: props.foveation })
+  })
 
-  useIsomorphicLayoutEffect(() => globalSessionStore.subscribe(({ session }) => set(() => ({ session }))), [gl.xr, set])
-
-  useIsomorphicLayoutEffect(() => {
-    gl.xr.setFoveation(foveation)
-    set(() => ({ foveation }))
-  }, [gl.xr, foveation, set])
-
-  useIsomorphicLayoutEffect(() => {
+  createEffect(() => {
     try {
-      if (frameRate) session?.updateTargetFrameRate?.(frameRate)
+      if (props.frameRate) xrState.session?.updateTargetFrameRate?.(props.frameRate)
     } catch (_) {
       // Framerate not supported or configurable
     }
-    set(() => ({ frameRate }))
-  }, [session, frameRate, set])
+    xrState.set({ frameRate: props.frameRate })
+  })
 
-  useIsomorphicLayoutEffect(() => {
-    const globalSessionState = globalSessionStore.getState()
-    gl.xr.setReferenceSpaceType(referenceSpace)
-    set(() => ({ referenceSpace }))
-    globalSessionState.set({ referenceSpaceType: referenceSpace })
-  }, [gl.xr, referenceSpace, set])
+  createEffect(() => {
+    threeState.gl.xr.setReferenceSpaceType(props.referenceSpace)
+    xrState.set({ referenceSpace: props.referenceSpace })
+    globalSessionStore.set({ referenceSpaceType: props.referenceSpace })
+  })
 
-  useIsomorphicLayoutEffect(() => {
-    if (!session) return void gl.xr.setSession(null!)
+  createEffect(() => {
+    if (!xrState.session) return void threeState.gl.xr.setSession(null!)
 
     const handleSessionStart = (nativeEvent: XRManagerEvent) => {
-      set(() => ({ isPresenting: true }))
-      onSessionStartRef.current?.({ nativeEvent: { ...nativeEvent, target: session }, target: session })
+      xrState.set({ isPresenting: true })
+      props.onSessionStart?.({ nativeEvent: { ...nativeEvent, target: xrState.session }, target: xrState.session })
     }
     const handleSessionEnd = (nativeEvent: XRManagerEvent) => {
-      set(() => ({ isPresenting: false, session: null }))
-      globalSessionStore.setState(() => ({ session: null }))
-      onSessionEndRef.current?.({ nativeEvent: { ...nativeEvent, target: session }, target: session })
+      xrState.set({ isPresenting: false, session: null })
+      globalSessionStore.set({ session: null })
+      props.onSessionEnd?.({ nativeEvent: { ...nativeEvent, target: xrState.session }, target: xrState.session })
     }
     const handleVisibilityChange = (nativeEvent: XRSessionEvent) => {
-      onVisibilityChangeRef.current?.({ nativeEvent, target: session })
+      props.onVisibilityChange?.({ nativeEvent, target: xrState.session })
     }
     const handleInputSourcesChange = (nativeEvent: XRInputSourceChangeEvent) => {
-      const isHandTracking = Object.values(session.inputSources).some((source) => source.hand)
-      set(() => ({ isHandTracking }))
-      onInputSourcesChangeRef.current?.({ nativeEvent, target: session })
+      if (!xrState.session) return
+      const isHandTracking = Object.values(xrState.session.inputSources).some((source) => source.hand)
+      xrState.set({ isHandTracking })
+      props.onInputSourcesChange?.({ nativeEvent, target: xrState.session })
     }
 
-    gl.xr.addEventListener('sessionstart', handleSessionStart)
-    gl.xr.addEventListener('sessionend', handleSessionEnd)
-    session.addEventListener('visibilitychange', handleVisibilityChange)
-    session.addEventListener('inputsourceschange', handleInputSourcesChange)
+    threeState.gl.xr.addEventListener('sessionstart', handleSessionStart)
+    threeState.gl.xr.addEventListener('sessionend', handleSessionEnd)
+    xrState.session.addEventListener('visibilitychange', handleVisibilityChange)
+    xrState.session.addEventListener('inputsourceschange', handleInputSourcesChange)
 
-    gl.xr.setSession(session).then(() => {
+    threeState.gl.xr.setSession(xrState.session).then(() => {
       // on setSession, three#WebXRManager resets foveation to 1
       // so foveation set needs to happen after it
-      gl.xr.setFoveation(get().foveation)
+      threeState.gl.xr.setFoveation(xrState.foveation)
     })
 
-    return () => {
-      gl.xr.removeEventListener('sessionstart', handleSessionStart)
-      gl.xr.removeEventListener('sessionend', handleSessionEnd)
-      session.removeEventListener('visibilitychange', handleVisibilityChange)
-      session.removeEventListener('inputsourceschange', handleInputSourcesChange)
-    }
-  }, [session, gl.xr, set, get])
+    onCleanup(() => {
+      threeState.gl.xr.removeEventListener('sessionstart', handleSessionStart)
+      threeState.gl.xr.removeEventListener('sessionend', handleSessionEnd)
+      xrState.session?.removeEventListener('visibilitychange', handleVisibilityChange)
+      xrState.session?.removeEventListener('inputsourceschange', handleInputSourcesChange)
+    })
+  })
 
   return (
     <InteractionManager>
-      <primitive object={player}>
-        <primitive object={camera} />
-        {controllers.map((controller) => (
-          <primitive key={controller.index} object={controller} />
-        ))}
-      </primitive>
-      {children}
+      <T.Primitive object={xrState.player}>
+        <T.Primitive object={threeState.camera} />
+        <For each={xrState.controllers}>{(controller) => <T.Primitive object={controller} />}</For>
+      </T.Primitive>
+      {props.children}
     </InteractionManager>
   )
 }
 
 export function XR(props: XRProps) {
-  const store = React.useMemo(
-    () =>
-      create<XRState>((set, get) => ({
-        set,
-        get,
+  // @ts-expect-error
+  const set: SetStoreFunction<XRState> = (...args: any[]) => setStore(...args)
+  const get: Accessor<XRState> = () => store
+  const [store, setStore] = createStore<XRState>({
+    set,
+    get,
 
-        controllers: [],
-        isPresenting: false,
-        isHandTracking: false,
-        player: new THREE.Group(),
-        session: null,
-        foveation: 0,
-        referenceSpace: 'local-floor',
+    controllers: [],
+    isPresenting: false,
+    isHandTracking: false,
+    player: new THREE.Group(),
+    session: null,
+    foveation: 0,
+    referenceSpace: 'local-floor',
 
-        hoverState: {
-          left: new Map(),
-          right: new Map(),
-          none: new Map()
-        },
-        interactions: new Map(),
-        hasInteraction(object: THREE.Object3D, eventType: XRInteractionType) {
-          return !!get()
-            .interactions.get(object)
-            ?.[eventType].some((handlerRef) => handlerRef.current)
-        },
-        getInteraction(object: THREE.Object3D, eventType: XRInteractionType) {
-          return get()
-            .interactions.get(object)
-            ?.[eventType].reduce((result, handlerRef) => {
-              if (handlerRef.current) {
-                result.push(handlerRef.current)
-              }
-              return result
-            }, [] as XRInteractionHandler[])
-        },
-        addInteraction(object: THREE.Object3D, eventType: XRInteractionType, handlerRef: React.RefObject<XRInteractionHandler>) {
-          const interactions = get().interactions
-          if (!interactions.has(object)) {
-            interactions.set(object, {
-              onHover: [],
-              onBlur: [],
-              onSelect: [],
-              onSelectEnd: [],
-              onSelectStart: [],
-              onSelectMissed: [],
-              onSqueeze: [],
-              onSqueezeEnd: [],
-              onSqueezeStart: [],
-              onSqueezeMissed: [],
-              onMove: []
-            })
+    hoverState: {
+      left: new Map(),
+      right: new Map(),
+      none: new Map()
+    },
+    interactions: new Map(),
+    hasInteraction(object: THREE.Object3D, eventType: XRInteractionType) {
+      return !!get()
+        .interactions.get(object)
+        ?.[eventType].some((handlerRef) => handlerRef)
+    },
+    getInteraction(object: THREE.Object3D, eventType: XRInteractionType) {
+      return get()
+        .interactions.get(object)
+        ?.[eventType].reduce((result, handlerRef) => {
+          if (handlerRef) {
+            result.push(handlerRef)
           }
+          return result
+        }, [] as XRInteractionHandler[])
+    },
+    addInteraction(object: THREE.Object3D, eventType: XRInteractionType, handlerRef: React.RefObject<XRInteractionHandler>) {
+      const interactions = get().interactions
+      if (!interactions.has(object)) {
+        interactions.set(object, {
+          onHover: [],
+          onBlur: [],
+          onSelect: [],
+          onSelectEnd: [],
+          onSelectStart: [],
+          onSelectMissed: [],
+          onSqueeze: [],
+          onSqueezeEnd: [],
+          onSqueezeStart: [],
+          onSqueezeMissed: [],
+          onMove: []
+        })
+      }
 
-          const target = interactions.get(object)!
-          target[eventType].push(handlerRef)
-        },
-        removeInteraction(object: THREE.Object3D, eventType: XRInteractionType, handlerRef: React.RefObject<XRInteractionHandler>) {
-          const target = get().interactions.get(object)
-          if (target) {
-            const interactionIndex = target[eventType].indexOf(handlerRef)
-            if (interactionIndex !== -1) target[eventType].splice(interactionIndex, 1)
-          }
-        }
-      })),
-    []
-  )
+      const target = interactions.get(object)!
+      target[eventType].push(handlerRef)
+    },
+    removeInteraction(object: THREE.Object3D, eventType: XRInteractionType, handlerRef: React.RefObject<XRInteractionHandler>) {
+      const target = get().interactions.get(object)
+      if (target) {
+        const interactionIndex = target[eventType].indexOf(handlerRef)
+        if (interactionIndex !== -1) target[eventType].splice(interactionIndex, 1)
+      }
+    }
+  })
 
   return (
     <XRContext.Provider value={store}>
@@ -243,7 +242,7 @@ export function XR(props: XRProps) {
 
 export type XRButtonStatus = 'unsupported' | 'exited' | 'entered'
 export type XRButtonUnsupportedReason = 'unknown' | 'https' | 'security'
-export interface XRButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onError'> {
+export interface XRButtonProps extends Omit<JSX.IntrinsicElements['button'], 'children' | 'onError'> {
   /** The type of `XRSession` to create */
   mode: 'AR' | 'VR' | 'inline'
   /**
@@ -258,7 +257,7 @@ export interface XRButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButto
   /** This callback gets fired if XR initialization fails. */
   onError?: (error: Error) => void
   /** React children, can also accept a callback returning an `XRButtonStatus` */
-  children?: React.ReactNode | ((status: XRButtonStatus) => React.ReactNode)
+  children?: JSX.Element | ((status: XRButtonStatus) => JSX.Element)
 }
 
 const getSessionOptions = (
@@ -281,7 +280,7 @@ const getSessionOptions = (
 }
 
 export const startSession = async (sessionMode: XRSessionMode, sessionInit: XRButtonProps['sessionInit']) => {
-  const xrState = globalSessionStore.getState()
+  const xrState = globalSessionStore.get()
 
   if (xrState.session) {
     console.warn('@react-three/xr: session already started, please stop it first')
@@ -290,12 +289,12 @@ export const startSession = async (sessionMode: XRSessionMode, sessionInit: XRBu
 
   const options = getSessionOptions(xrState.referenceSpaceType, sessionInit)
   const session = await navigator.xr!.requestSession(sessionMode, options)
-  xrState.set(() => ({ session }))
+  xrState.set({ session })
   return session
 }
 
 export const stopSession = async () => {
-  const xrState = globalSessionStore.getState()
+  const xrState = globalSessionStore.get()
 
   if (!xrState.session) {
     console.warn('@react-three/xr: no session to stop, please start it first')
@@ -310,7 +309,7 @@ export const toggleSession = async (
   sessionMode: XRSessionMode,
   { sessionInit, enterOnly, exitOnly }: Pick<XRButtonProps, 'sessionInit' | 'enterOnly' | 'exitOnly'> = {}
 ) => {
-  const xrState = globalSessionStore.getState()
+  const xrState = globalSessionStore.get()
 
   // Bail if certain toggle way is disabled
   if (xrState.session && enterOnly) return
@@ -344,20 +343,27 @@ const getLabel = (status: XRButtonStatus, mode: XRButtonProps['mode'], reason: X
   }
 }
 
-export const XRButton = React.forwardRef<HTMLButtonElement, XRButtonProps>(function XRButton(
-  { mode, sessionInit, enterOnly = false, exitOnly = false, onClick, onError, children, ...props },
-  ref
-) {
-  const [status, setStatus] = React.useState<XRButtonStatus>('exited')
-  const [reason, setReason] = React.useState<XRButtonUnsupportedReason>('unknown')
-  const label = getLabel(status, mode, reason)
-  const sessionMode = (mode === 'inline' ? mode : `immersive-${mode.toLowerCase()}`) as XRSessionMode
-  const onErrorRef = useCallbackRef(onError)
+export const XRButton: RefComponent<HTMLButtonElement, XRButtonProps> = function XRButton(_props) {
+  const [props, rest] = processProps(_props, { enterOnly: false, exitOnly: false }, [
+    'ref',
+    'mode',
+    'sessionInit',
+    'enterOnly',
+    'exitOnly',
+    'onClick',
+    'onError',
+    'children'
+  ])
 
-  useIsomorphicLayoutEffect(() => {
+  const [status, setStatus] = createSignal<XRButtonStatus>('exited')
+  const [reason, setReason] = createSignal<XRButtonUnsupportedReason>('unknown')
+  const label = () => getLabel(status(), props.mode, reason())
+  const sessionMode = () => (props.mode === 'inline' ? props.mode : `immersive-${props.mode.toLowerCase()}`) as XRSessionMode
+
+  createEffect(() => {
     if (!navigator?.xr) return void setStatus('unsupported')
     navigator.xr
-      .isSessionSupported(sessionMode)
+      .isSessionSupported(sessionMode())
       .then((supported) => {
         if (!supported) {
           const isHttps = location.protocol === 'https:'
@@ -376,41 +382,34 @@ export const XRButton = React.forwardRef<HTMLButtonElement, XRButtonProps>(funct
           setReason('unknown')
         }
       })
-  }, [sessionMode])
+  })
 
-  useIsomorphicLayoutEffect(
-    () =>
-      globalSessionStore.subscribe((state) => {
-        if (state.session) {
-          setStatus('entered')
-        } else if (status !== 'unsupported') {
-          setStatus('exited')
-        }
-      }),
-    [status]
-  )
+  createEffect(() => {
+    if (globalSessionStore.session) {
+      setStatus('entered')
+    } else if (globalSessionStore.session !== 'unsupported') {
+      setStatus('exited')
+    }
+  })
 
-  const handleButtonClick = React.useCallback(
-    async (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
-      onClick?.(event)
+  const handleButtonClick = async (event: MouseEvent) => {
+    // s3f look into type-error
+    props.onClick?.(event)
 
-      try {
-        toggleSession(sessionMode, { sessionInit, enterOnly, exitOnly })
-      } catch (e) {
-        const onError = onErrorRef.current
-        if (onError && e instanceof Error) onError(e)
-        else throw e
-      }
-    },
-    [onClick, sessionMode, sessionInit, enterOnly, exitOnly, onErrorRef]
-  )
+    try {
+      toggleSession(sessionMode(), { sessionInit: props.sessionInit, enterOnly: props.enterOnly, exitOnly: props.exitOnly })
+    } catch (e) {
+      if (props.onError && e instanceof Error) props.onError(e)
+      else throw e
+    }
+  }
 
   return (
-    <button {...props} ref={ref} onClick={status === 'unsupported' ? onClick : handleButtonClick}>
-      {typeof children === 'function' ? children(status) : children ?? label}
+    <button {...rest} ref={props.ref} onClick={status() === 'unsupported' ? props.onClick : handleButtonClick}>
+      {typeof props.children === 'function' ? props.children(status()) : props.children ?? label()}
     </button>
   )
-})
+}
 
 const buttonStyles: any = {
   position: 'absolute',
@@ -428,57 +427,59 @@ const buttonStyles: any = {
   cursor: 'pointer'
 }
 
-export const ARButton = React.forwardRef<HTMLButtonElement, Omit<XRButtonProps, 'mode'>>(
-  (
+export const ARButton: RefComponent<HTMLButtonElement, Omit<XRButtonProps, 'mode'>> = (_props) => {
+  const [props, rest] = processProps(
+    _props,
     {
-      style = buttonStyles,
-      sessionInit = {
+      style: buttonStyles,
+      sessionInit: {
         // @ts-ignore
         domOverlay: typeof document !== 'undefined' ? { root: document.body } : undefined,
         optionalFeatures: ['hit-test', 'dom-overlay', 'dom-overlay-for-handheld-ar']
-      },
-      children,
-      ...rest
+      }
     },
-    ref
-  ) => (
-    <XRButton {...rest} ref={ref} mode="AR" style={style} sessionInit={sessionInit}>
-      {children}
+    ['ref', 'style', 'sessionInit', 'children']
+  )
+  return (
+    <XRButton {...rest} ref={props.ref} mode="AR" style={props.style} sessionInit={props.sessionInit}>
+      {props.children}
     </XRButton>
   )
-)
+}
 
-export const VRButton = React.forwardRef<HTMLButtonElement, Omit<XRButtonProps, 'mode'>>(
-  (
+export const VRButton: RefComponent<HTMLButtonElement, Omit<XRButtonProps, 'mode'>> = (_props) => {
+  const [props, rest] = processProps(
+    _props,
     {
-      style = buttonStyles,
-      sessionInit = { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers'] },
-      children,
-      ...rest
+      style: buttonStyles,
+      sessionInit: { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers'] }
     },
-    ref
-  ) => (
-    <XRButton {...rest} ref={ref} mode="VR" style={style} sessionInit={sessionInit}>
-      {children}
+    ['ref', 'style', 'sessionInit', 'children']
+  )
+  return (
+    <XRButton {...rest} ref={props.ref} mode="VR" style={props.style} sessionInit={props.sessionInit}>
+      {props.children}
     </XRButton>
   )
-)
+}
 
-export function useXR<T = XRState>(
-  selector: StateSelector<XRState, T> = (state) => state as unknown as T,
-  equalityFn?: EqualityChecker<T>
-) {
-  const store = React.useContext(XRContext)
+// s3f  removed equalityFn because is gonna be deprecated anyway: https://github.com/pmndrs/zustand/discussions/1937
+//      follows same overloads as `useThree`:
+//        - you specify a selector and get an accessor
+//        - you don't specify a selector and get the store directly.
+export function useXR(): XRState
+export function useXR<T = XRState>(selector: (state: XRState) => T): Accessor<T>
+export function useXR<T = XRState>(selector?: (state: XRState) => T) {
+  const store = useContext(XRContext)
   if (!store) throw new Error('useXR must be used within an <XR /> component!')
-  return store(selector, equalityFn)
+  if (selector) return () => selector(store)
+  return store
 }
 
 export function useController(handedness: XRHandedness) {
   const controllers = useXR((state) => state.controllers)
-  const controller = React.useMemo(
-    () => controllers.find(({ inputSource }) => inputSource?.handedness && inputSource.handedness === handedness),
-    [handedness, controllers]
+  const controller = createMemo(() =>
+    controllers().find(({ inputSource }) => inputSource?.handedness && inputSource.handedness === handedness)
   )
-
   return controller
 }

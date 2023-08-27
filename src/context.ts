@@ -1,12 +1,13 @@
-import * as React from 'react'
 import * as THREE from 'three'
-import { GetState, SetState, UseBoundStore } from 'zustand'
-import { XRInteractionType, XRInteractionHandler } from './Interactions'
+// import { GetState, SetState, UseBoundStore } from 'zustand'
+import { Accessor, createContext } from 'solid-js'
+import { SetStoreFunction } from 'solid-js/store'
+import { XRInteractionHandler, XRInteractionType } from './Interactions'
 import { XRController } from './XRController'
 
 export interface XRState {
-  set: SetState<XRState>
-  get: GetState<XRState>
+  set: SetStoreFunction<XRState>
+  get: Accessor<XRState>
 
   controllers: XRController[]
   isPresenting: boolean
@@ -18,11 +19,11 @@ export interface XRState {
   referenceSpace: XRReferenceSpaceType
 
   hoverState: Record<XRHandedness, Map<THREE.Object3D, THREE.Intersection>>
-  interactions: Map<THREE.Object3D, Record<XRInteractionType, React.RefObject<XRInteractionHandler>[]>>
+  interactions: Map<THREE.Object3D, Record<XRInteractionType, XRInteractionHandler[]>>
   hasInteraction: (object: THREE.Object3D, eventType: XRInteractionType) => boolean
   getInteraction: (object: THREE.Object3D, eventType: XRInteractionType) => XRInteractionHandler[] | undefined
-  addInteraction: (object: THREE.Object3D, eventType: XRInteractionType, handlerRef: React.RefObject<XRInteractionHandler>) => void
-  removeInteraction: (object: THREE.Object3D, eventType: XRInteractionType, handlerRef: React.RefObject<XRInteractionHandler>) => void
+  addInteraction: (object: THREE.Object3D, eventType: XRInteractionType, handlerRef: XRInteractionHandler) => void
+  removeInteraction: (object: THREE.Object3D, eventType: XRInteractionType, handlerRef: XRInteractionHandler) => void
 }
 
-export const XRContext = React.createContext<UseBoundStore<XRState>>(null!)
+export const XRContext = createContext<XRState>(null!)

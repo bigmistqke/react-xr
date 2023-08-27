@@ -1,6 +1,6 @@
-import { XRController } from './XRController'
+import { createEffect, mapArray, onCleanup } from 'solid-js'
 import { useXR } from './XR'
-import { useCallbackRef, useIsomorphicLayoutEffect } from './utils'
+import { XRController } from './XRController'
 
 export interface XREventRepresentation {
   type: string
@@ -24,19 +24,17 @@ export interface XREventOptions {
   handedness?: XRHandedness
 }
 
+// s3f  should args be accessors?
 export function useXREvent(event: XRControllerEventType, handler: XREventHandler<XRControllerEvent>, { handedness }: XREventOptions = {}) {
-  const handlerRef = useCallbackRef(handler)
   const controllers = useXR((state) => state.controllers)
 
-  useIsomorphicLayoutEffect(() => {
-    const listeners = controllers.map((target) => {
+  createEffect(
+    mapArray(controllers, (target) => {
       if (handedness && target.inputSource && target.inputSource.handedness !== handedness) return
 
-      const listener = (nativeEvent: XRControllerEvent) => handlerRef.current({ nativeEvent, target })
+      const listener = (nativeEvent: XRControllerEvent) => handler({ nativeEvent, target })
       target.controller.addEventListener(event, listener)
-      return () => target.controller.removeEventListener(event, listener)
+      onCleanup(() => target.controller.removeEventListener(event, listener))
     })
-
-    return () => listeners.forEach((cleanup) => cleanup?.())
-  }, [controllers, handedness, event])
+  )
 }
