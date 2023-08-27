@@ -1,8 +1,8 @@
 {
   "name": "@solid-three/xr",
   "version": "5.6.2",
-  "packageManager": "yarn@1.22.19",
-  "description": "Solid components and hooks for creating VR/AR applications with solid-three-fiber",
+  "packageManager": "pnpm@7.14.0",
+  "description": "Solid components and hooks for creating VR/AR applications with @solid-three/fiber",
   "keywords": [
     "xr",
     "ar",
@@ -14,16 +14,17 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pmndrs/react-xr.git"
+    "url": "git+https://github.com/bigmistqke/solid-xr.git"
   },
   "bugs": {
-    "url": "https://github.com/pmndrs/react-xr/issues"
+    "url": "https://github.com/bigmistqke/solid-xr/issues"
   },
   "homepage": "https://github.com/pmndrs/react-xr#readme",
   "author": "Oleksandr Dubenko (https://github.com/sniok)",
   "maintainers": [
     "Michael Bashurov (https://github.com/saitonakamura)",
-    "Cody Bennett (https://github.com/codyjasonbennett)"
+    "Cody Bennett (https://github.com/codyjasonbennett)",
+    "Vincent Van Dijck (https://github.com/bigmistqke"
   ],
   "files": [
     "dist/*",
