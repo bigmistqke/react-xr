@@ -17,7 +17,7 @@
 [![Downloads](https://img.shields.io/npm/dt/@solid-three/xr.svg?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@solid-three/xr)
 [![Discord Shield](https://img.shields.io/discord/740090768164651008?style=flat&colorA=000000&colorB=000000&label=discord&logo=discord&logoColor=ffffff)](https://discord.gg/poimandres)
 
-solid components and hooks for creating VR/AR applications with [@solid-three/fiber](https://github.com/pmndrs/solid-three-fiber)
+solid components and hooks for creating VR/AR applications with [@solid-three/fiber](https://github.com/solidjs-community/solid-three)
 
 ```bash
 npm install @solid-three/xr
